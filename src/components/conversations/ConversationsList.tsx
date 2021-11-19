@@ -22,19 +22,18 @@ function getLastMessage(messages: Message[], typingData: string[]) {
   if (messages.length === 0) {
     return "No messages";
   }
-  if (!!messages[messages.length - 1].media) {
+  if (!!messages[0].media) {
     return "Media message";
   }
-  return messages[messages.length - 1].body;
+  return messages[0].body;
 }
 
 function isMyMessage(messages: Message[]) {
   if (messages === undefined || messages === null || messages.length === 0) {
     return false;
   }
-  return messages[messages.length - 1].author ===
-    localStorage.getItem("username")
-    ? messages[messages.length - 1]
+  return messages[0].author === localStorage.getItem("username")
+    ? messages[0]
     : false;
 }
 
@@ -126,8 +125,7 @@ const ConversationsList: React.FC = () => {
               updateUnreadMessages(convo.sid, 0);
               //set messages to be read
               const lastMessage =
-                messages[convo.sid].length &&
-                messages[convo.sid][messages[convo.sid].length - 1];
+                messages[convo.sid].length && messages[convo.sid][0];
               if (lastMessage && lastMessage.index !== -1) {
                 await convo.updateLastReadMessageIndex(lastMessage.index);
               }

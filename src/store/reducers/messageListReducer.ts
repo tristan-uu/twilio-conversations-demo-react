@@ -21,21 +21,21 @@ const reducer = (state = initialState, action: Action): ChatMessagesState => {
     case ActionType.PUSH_MESSAGES: {
       const { channelSid, messages: messagesToAdd } = action.payload;
       const existingMessages = state[channelSid] ?? [];
+      const reversedNewMessages = messagesToAdd.reverse();
 
       return Object.assign({}, state, {
-        [channelSid]: existingMessages.concat(messagesToAdd),
+        [channelSid]: existingMessages.concat(reversedNewMessages),
       }) as ChatMessagesState;
     }
     case ActionType.ADD_MESSAGES: {
-      //get convo sid and messages to add from payload
       const { channelSid, messages: messagesToAdd } = action.payload;
+      const reversedNewMessages = messagesToAdd.reverse();
 
-      //get existing messages for the convo
       const existingMessages = state[channelSid] ?? [];
 
       const filteredExistingMessages = existingMessages.filter(
         (message: Message) => {
-          return !messagesToAdd.find(
+          return !reversedNewMessages.find(
             (value) =>
               value.body === message.body &&
               value.author === message.author &&
@@ -47,10 +47,13 @@ const reducer = (state = initialState, action: Action): ChatMessagesState => {
       );
 
       //add new messages to exisiting, ignore duplicates
-      const messagesUnique = [...filteredExistingMessages, ...messagesToAdd];
+      const messagesUnique = [
+        ...filteredExistingMessages,
+        ...reversedNewMessages,
+      ];
 
       const sortedMessages = messagesUnique.sort(
-        (a, b) => a.dateCreated.getTime() - b.dateCreated.getTime()
+        (a, b) => b.dateCreated.getTime() - a.dateCreated.getTime()
       );
 
       //overwrite the channelSid messages

@@ -2,7 +2,9 @@ import React, { useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { bindActionCreators } from "redux";
 import { saveAs } from "file-saver";
-
+import { VariableSizeList as List } from "react-window";
+import InfiniteLoader from "react-window-infinite-loader";
+import AutoSizer from "react-virtualized-auto-sizer";
 import { useTheme } from "@twilio-paste/theme";
 import {
   Conversation,
@@ -10,6 +12,7 @@ import {
   Media,
   Participant,
 } from "@twilio/conversations";
+import { Spinner } from "@twilio-paste/core";
 
 import { getBlobFile, getMessageStatus } from "../../api";
 import MessageView from "./MessageView";
@@ -21,12 +24,15 @@ import {
   successNotification,
   unexpectedErrorNotification,
 } from "../../helpers";
+import styles from "../../styles";
 
 interface MessageListProps {
   messages: Message[];
   conversation: Conversation;
   participants: Participant[];
   lastReadIndex: number;
+  hasMore: boolean;
+  fetchMore: () => Promise<void>;
 }
 
 function getMessageTime(message: Message) {
@@ -65,7 +71,7 @@ const MessageList: React.FC<MessageListProps> = (props: MessageListProps) => {
   }
 
   const theme = useTheme();
-  const myRef = useRef<HTMLInputElement>(null);
+  const readHorizonRef = useRef<HTMLInputElement>(null);
   const messagesLength: number = messages.length;
 
   const dispatch = useDispatch();
@@ -88,10 +94,10 @@ const MessageList: React.FC<MessageListProps> = (props: MessageListProps) => {
   const [scrolledToHorizon, setScrollToHorizon] = useState(false);
 
   useEffect(() => {
-    if (scrolledToHorizon || !myRef.current) {
+    if (scrolledToHorizon || !readHorizonRef.current) {
       return;
     }
-    myRef.current.scrollIntoView({
+    readHorizonRef.current.scrollIntoView({
       behavior: "smooth",
     });
     setScrollToHorizon(true);
@@ -137,91 +143,185 @@ const MessageList: React.FC<MessageListProps> = (props: MessageListProps) => {
     saveAs(file, filename);
   };
 
+  const getMessageHeight = (index: number) => {
+    const message = messages[index];
+    let height = message.author === localStorage.getItem("username") ? 98 : 93; // empty message block with/without statuses
+    height += 24; // padding top & bottom
+
+    // calculating media message height
+    if (message.media) {
+      if (message.media.contentType.includes("image")) {
+        return (height += 200);
+      }
+
+      return (height += 71); // file view height
+    }
+
+    // calculating text message height
+    const words = message.body.split(" ");
+    let lineChars = 0;
+
+    if (words.length) {
+      height += 17;
+    }
+
+    words.forEach((word) => {
+      if (lineChars + word.length < 75) {
+        if (lineChars == 0) {
+          lineChars = word.length;
+        } else {
+          lineChars += word.length + 1;
+        }
+      } else {
+        height += 17;
+        lineChars = word.length;
+      }
+    });
+
+    return height;
+  };
+
+  const { hasMore, fetchMore } = props;
+  const isItemLoaded = (index: number) => !hasMore || index < messages?.length;
+
   return (
     <>
-      {messages.map((message, index) => {
-        const isImage = message.media?.contentType?.includes("image");
-        const fileBlob = conversationAttachments?.[message.sid] ?? null;
-
-        return (
-          <div
-            key={
-              message.dateCreated.getTime() +
-              message.body +
-              message.media?.filename +
-              message.sid
-            }
+      <AutoSizer>
+        {({ height, width }) => (
+          <InfiniteLoader
+            isItemLoaded={isItemLoaded}
+            itemCount={hasMore ? messages?.length + 1 : messages?.length}
+            loadMoreItems={fetchMore}
           >
-            {lastReadIndex !== -1 &&
-            horizonAmount &&
-            showHorizonIndex === message.index ? (
-              <Horizon ref={myRef} amount={horizonAmount} />
-            ) : null}
-            <MessageView
-              // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-              // @ts-ignore
-              reactions={message.attributes["reactions"]}
-              message={
-                message.body ||
-                (message.media ? (
-                  <MessageFile
-                    key={message.sid}
-                    media={message.media}
-                    type="view"
-                    onDownload={() => onDownloadAttachment(message)}
-                    isImage={isImage}
-                    file={fileBlob}
-                    sending={message.index === -1}
-                    loading={fileLoading[message.sid]}
-                    onOpen={
-                      isImage && fileBlob
-                        ? () =>
-                            setImagePreview({
-                              message,
-                              file: fileBlob,
+            {({ onItemsRendered, ref }) => (
+              <List
+                height={height}
+                itemCount={hasMore ? messages?.length + 1 : messages?.length}
+                itemSize={getMessageHeight}
+                onItemsRendered={onItemsRendered}
+                ref={ref}
+                width={width}
+                style={{ transform: "matrix(1, 0, 0, -1, 0, 0)" }}
+              >
+                {({ index, style }) => {
+                  let content;
+                  if (!isItemLoaded(index)) {
+                    content = (
+                      <div style={{ ...styles.paginationSpinner, ...style }}>
+                        <Spinner
+                          decorative={false}
+                          size="sizeIcon50"
+                          title="Loading"
+                        />
+                      </div>
+                    );
+                  } else {
+                    const message = messages[index];
+                    const isImage =
+                      message.media?.contentType?.includes("image");
+                    const fileBlob =
+                      conversationAttachments?.[message.sid] ?? null;
+
+                    content = (
+                      <div
+                        key={
+                          message.dateCreated.getTime() +
+                          message.body +
+                          message.media?.filename +
+                          message.sid
+                        }
+                        style={{
+                          ...style,
+                          ...{ transform: "matrix(1, 0, 0, -1, 0, 0)" },
+                        }}
+                      >
+                        {lastReadIndex !== -1 &&
+                        horizonAmount &&
+                        showHorizonIndex === message.index ? (
+                          <Horizon
+                            ref={readHorizonRef}
+                            amount={horizonAmount}
+                          />
+                        ) : null}
+                        <MessageView
+                          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                          // @ts-ignore
+                          reactions={message.attributes["reactions"]}
+                          message={
+                            message.body ||
+                            (message.media ? (
+                              <MessageFile
+                                key={message.sid}
+                                media={message.media}
+                                type="view"
+                                onDownload={() => onDownloadAttachment(message)}
+                                isImage={isImage}
+                                file={fileBlob}
+                                sending={message.index === -1}
+                                loading={fileLoading[message.sid]}
+                                onOpen={
+                                  isImage && fileBlob
+                                    ? () =>
+                                        setImagePreview({
+                                          message,
+                                          file: fileBlob,
+                                        })
+                                    : () =>
+                                        onFileOpen(
+                                          conversationAttachments?.[
+                                            message.sid
+                                          ],
+                                          message.media
+                                        )
+                                }
+                              />
+                            ) : (
+                              ""
+                            ))
+                          }
+                          author={message.author}
+                          getStatus={getMessageStatus(
+                            props.conversation,
+                            message,
+                            props.participants
+                          )}
+                          onDeleteMessage={async () => {
+                            try {
+                              await message.remove();
+                              successNotification({
+                                message: "Message deleted.",
+                                addNotifications,
+                              });
+                            } catch {
+                              unexpectedErrorNotification(addNotifications);
+                            }
+                          }}
+                          topPadding={setTopPadding(index)}
+                          lastMessageBottomPadding={
+                            index === messagesLength - 1 ? 16 : 0
+                          }
+                          sameAuthorAsPrev={
+                            setTopPadding(index) !== theme.space.space20
+                          }
+                          messageTime={getMessageTime(message)}
+                          updateAttributes={(attribute) =>
+                            message.updateAttributes({
+                              ...message.attributes,
+                              ...attribute,
                             })
-                        : () =>
-                            onFileOpen(
-                              conversationAttachments?.[message.sid],
-                              message.media
-                            )
-                    }
-                  />
-                ) : (
-                  ""
-                ))
-              }
-              author={message.author}
-              getStatus={getMessageStatus(
-                props.conversation,
-                message,
-                props.participants
-              )}
-              onDeleteMessage={async () => {
-                try {
-                  await message.remove();
-                  successNotification({
-                    message: "Message deleted.",
-                    addNotifications,
-                  });
-                } catch {
-                  unexpectedErrorNotification(addNotifications);
-                }
-              }}
-              topPadding={setTopPadding(index)}
-              lastMessageBottomPadding={index === messagesLength - 1 ? 16 : 0}
-              sameAuthorAsPrev={setTopPadding(index) !== theme.space.space20}
-              messageTime={getMessageTime(message)}
-              updateAttributes={(attribute) =>
-                message.updateAttributes({
-                  ...message.attributes,
-                  ...attribute,
-                })
-              }
-            />
-          </div>
-        );
-      })}
+                          }
+                        />
+                      </div>
+                    );
+                  }
+
+                  return <>{content}</>;
+                }}
+              </List>
+            )}
+          </InfiniteLoader>
+        )}
+      </AutoSizer>
       {imagePreview
         ? (function () {
             const date = new Date(imagePreview?.message.dateCreated);

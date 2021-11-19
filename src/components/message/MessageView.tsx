@@ -88,6 +88,7 @@ const MessageView: React.FC<SingleMessageProps> = (
                 paddingLeft: theme.space.space30,
                 paddingRight: theme.space.space30,
                 borderRadius: theme.space.space30,
+                maxWidth: "75ch",
               }}
             >
               {props.message}
@@ -166,15 +167,6 @@ const MessageView: React.FC<SingleMessageProps> = (
                 </Box>
               </Box>
             </Box>
-
-            {status[MessageStatus.Failed] ? (
-              <div style={{ textAlign: "right", paddingTop: "4px" }}>
-                <span style={{ color: "#D61F1F" }}>
-                  An error has occurred.
-                  {/*Tap for more info.*/}
-                </span>
-              </div>
-            ) : null}
 
             {status[MessageStatus.Delivered] || status[MessageStatus.Read] ? (
               <Reactions

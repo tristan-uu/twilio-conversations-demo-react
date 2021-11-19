@@ -82,7 +82,7 @@ const MessageFile = ({
         </div>
         <img
           style={{
-            maxHeight: "300px",
+            maxHeight: "200px",
             zIndex: 6,
             maxWidth: "400px",
             filter: !file ? "blur(4px)" : "none",
