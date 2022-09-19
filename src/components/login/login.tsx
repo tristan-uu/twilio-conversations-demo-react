@@ -89,6 +89,11 @@ const Login: React.FC<LoginProps> = (props: LoginProps) => {
               setShowPassword={setShowPassword}
             />
           </Box>
+          <ul>
+            <li> user00: "user00",</li>
+            <li>user01: "user01",</li>
+            <li>admin: "admin"</li>
+          </ul>
           <Box style={styles.loginButton}>
             <Button
               fullWidth
